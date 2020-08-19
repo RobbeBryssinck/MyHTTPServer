@@ -17,6 +17,15 @@ void process_request(int, struct sockaddr_in *);
 int get_request(int, unsigned char *);
 int send_string(int, unsigned char *);
 int get_file_size(int);
+void handle_response(int);
+void send_404(struct response *);
+
+struct response {
+    int response_fd;
+    unsigned char *header;
+    unsigned char *body;
+    void (*send_response)(response *self);
+}
 
 int main(int argc, char const *argv[])
 {
@@ -78,12 +87,12 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
         return;
     }
 
-    printf("%s\n", request);
     ptr = strstr(request, " HTTP/");
     if (ptr == NULL) {
         printf(" NOT HTTP!");
     } else {
-        *ptr = 0;
+        // When the request is read, it stops after the resource because of the NULL charachter
+        *ptr = 0; 
         ptr = NULL;
         if (strncmp(request, "GET ", 4) == 0)
             ptr = request+4;
@@ -101,12 +110,16 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
             response_file = open(resource, O_RDONLY, 0);
             printf("\tOpening \'%s\'\t", resource);
             if (response_file == -1) {
+                // TODO: implement handle_response(int)
+                handle_response(404);
                 printf(" 404 Not found\n");
                 response_file = open("NotFound404.html", O_RDONLY, 0);
+                send_string(accept_sock, "HTTP/1.0 404 NOT FOUND\r\n");
+                send_string(accept_sock, "Server: Robbe Webserver\r\n\r\n");
             } else {
                 printf(" 200 OK\n");
                 send_string(accept_sock, "HTTP/1.0 200 OK\r\n");
-                send_string(accept_sock, "Server: Cosideci Webserver\r\n\r\n");
+                send_string(accept_sock, "Server: Robbe Webserver\r\n\r\n");
                 if (ptr == request + 4) {
                     if ( (length = get_file_size(response_file)) == -1) {
                         perror("Error opening response file");
@@ -171,4 +184,32 @@ int get_file_size(int fd) {
     if (fstat(fd, &stat_struct) == -1)
         return -1;
     return (int) stat_struct.st_size;
+}
+
+void handle_response(int code, int accept_sock, struct response *Response) {
+    Response->header = "HTTP/1.0 ";
+
+    switch(code)
+    {
+        case 404:
+            Response->send_response = send_404;
+            *(Response.header+9) = "404 NOT FOUND\r\nServer: Robbe webserver\r\n\r\n";
+            Response->body = "<html><body><h1>404</h1></body></html>";
+            break;
+
+        case 200:
+            printf("200\n");
+            break;
+
+        default:
+            // TODO: implement default
+            printf("Error!\n");
+    }
+
+    Response->send_response(*Response);
+}
+
+void send_404(struct response *Response) {
+    send_string(Response->header);
+    send_string(Response->body);
 }
