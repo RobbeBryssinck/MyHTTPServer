@@ -12,20 +12,13 @@
 #define MAX_REQUEST_SIZE 5000
 #define MAX_RESOURCE_SIZE 5000
 #define WEBROOT "./webroot"
+#define HEADER "HTTP/1.0 %s\r\nServer: Robbe webserver\r\n\r\n"
 
 void process_request(int, struct sockaddr_in *);
-int get_request(int, unsigned char *);
-int send_string(int, unsigned char *);
+int get_request(int, char *);
+int send_string(int, char *);
 int get_file_size(int);
-void handle_response(int);
-void send_404(struct response *);
-
-struct response {
-    int response_fd;
-    unsigned char *header;
-    unsigned char *body;
-    void (*send_response)(response *self);
-}
+void handle_response(int, int, int);
 
 int main(int argc, char const *argv[])
 {
@@ -75,7 +68,7 @@ int main(int argc, char const *argv[])
 }
 
 void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
-    unsigned char *ptr, request[MAX_REQUEST_SIZE], resource[MAX_RESOURCE_SIZE];
+    char *ptr, request[MAX_REQUEST_SIZE], resource[MAX_RESOURCE_SIZE];
     int response_file, length;
 
     length = get_request(accept_sock, request);
@@ -110,12 +103,10 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
             response_file = open(resource, O_RDONLY, 0);
             printf("\tOpening \'%s\'\t", resource);
             if (response_file == -1) {
-                // TODO: implement handle_response(int)
-                handle_response(404);
-                printf(" 404 Not found\n");
-                response_file = open("NotFound404.html", O_RDONLY, 0);
-                send_string(accept_sock, "HTTP/1.0 404 NOT FOUND\r\n");
-                send_string(accept_sock, "Server: Robbe Webserver\r\n\r\n");
+                strcpy(resource, WEBROOT);
+                strcat(resource, "/NotFound404.html");
+                response_file = open(resource, O_RDONLY, 0);
+                handle_response(404, response_file, accept_sock);
             } else {
                 printf(" 200 OK\n");
                 send_string(accept_sock, "HTTP/1.0 200 OK\r\n");
@@ -125,7 +116,7 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
                         perror("Error opening response file");
                         exit(EXIT_FAILURE);
                     }
-                    if ( (ptr = (unsigned char *) malloc(length)) == NULL) {
+                    if ( (ptr = (char *) malloc(length)) == NULL) {
                         perror("Error allocating memory for reading resource");
                         exit(EXIT_FAILURE);
                     }
@@ -140,10 +131,10 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
     shutdown(accept_sock, SHUT_RDWR);
 }
 
-int get_request(int accept_sock, unsigned char *request) {
+int get_request(int accept_sock, char *request) {
 #define EOL "\r\n\r\n"
 #define EOL_SIZE 4
-    unsigned char *ptr;
+    char *ptr;
     int i = 0;
     int eol_matched = 0;
 
@@ -165,7 +156,7 @@ int get_request(int accept_sock, unsigned char *request) {
     }
 }
 
-int send_string(int accept_sock, unsigned char *buffer) {
+int send_string(int accept_sock, char *buffer) {
     int sent_bytes, bytes_to_send;
     bytes_to_send = strlen(buffer);
     while (bytes_to_send > 0) {
@@ -186,15 +177,16 @@ int get_file_size(int fd) {
     return (int) stat_struct.st_size;
 }
 
-void handle_response(int code, int accept_sock, struct response *Response) {
-    Response->header = "HTTP/1.0 ";
+void handle_response(int code, int body_file, int accept_sock) {
+    char header[100];
+    char *body;
+    int length;
 
     switch(code)
     {
         case 404:
-            Response->send_response = send_404;
-            *(Response.header+9) = "404 NOT FOUND\r\nServer: Robbe webserver\r\n\r\n";
-            Response->body = "<html><body><h1>404</h1></body></html>";
+            printf(" 404 Not found\n");
+            sprintf(header, HEADER, "404 NOT FOUND");
             break;
 
         case 200:
@@ -206,10 +198,18 @@ void handle_response(int code, int accept_sock, struct response *Response) {
             printf("Error!\n");
     }
 
-    Response->send_response(*Response);
+    send_string(accept_sock, header);
+    if ( (length = get_file_size(body_file)) == -1) {
+        perror("Error opening response file");
+        exit(EXIT_FAILURE);
+    }
+    if ( (body = (char *) malloc(length)) == NULL) {
+        perror("Error allocating memory for reading resource");
+        exit(EXIT_FAILURE);
+    }
+    read(body_file, body, length);
+    send(accept_sock, body, length, 0);
+    free(body);
+    close(body_file);
 }
 
-void send_404(struct response *Response) {
-    send_string(Response->header);
-    send_string(Response->body);
-}
