@@ -15,10 +15,11 @@
 #define HEADER "HTTP/1.0 %s\r\nServer: Robbe webserver\r\n\r\n"
 
 void process_request(int, struct sockaddr_in *);
-int get_request(int, char *);
+int recv_request(int, char *);
 int send_string(int, char *);
 int get_file_size(int);
 void handle_response(int, int, int);
+void get_request(char *, int, struct sockaddr_in *);
 
 int main(int argc, char const *argv[])
 {
@@ -71,7 +72,7 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
     char *ptr, request[MAX_REQUEST_SIZE], resource[MAX_RESOURCE_SIZE];
     int response_file, length;
 
-    length = get_request(accept_sock, request);
+    length = recv_request(accept_sock, request);
     printf("Got request from %s:%d \"%s\"\n", inet_ntoa(client_addr_ptr->sin_addr), ntohs(client_addr_ptr->sin_port), request);
 
     if (length == -1) {
@@ -82,56 +83,29 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
 
     ptr = strstr(request, " HTTP/");
     if (ptr == NULL) {
+        // TODO: maybe return a real invalid request response?
         printf(" NOT HTTP!");
     } else {
         // When the request is read, it stops after the resource because of the NULL charachter
         *ptr = 0; 
         ptr = NULL;
-        if (strncmp(request, "GET ", 4) == 0)
+        if (strncmp(request, "GET ", 4) == 0) {
             ptr = request+4;
-        if (strncmp(request, "HEAD ", 5) == 0)
+            get_request(ptr, accept_sock, client_addr_ptr);
+        }
+        if (strncmp(request, "HEAD ", 5) == 0) {
             ptr = request+5;
+        }
 
         if (ptr == NULL) {
             printf("\tUNKNOWN REQUEST!\n");
-            // Maybe return a valid invalid request response?
-        } else {
-            if (ptr[strlen(ptr) - 1] == '/')
-                strcat(ptr, "index.html");
-            strcpy(resource, WEBROOT);
-            strcat(resource, ptr);
-            response_file = open(resource, O_RDONLY, 0);
-            printf("\tOpening \'%s\'\t", resource);
-            if (response_file == -1) {
-                strcpy(resource, WEBROOT);
-                strcat(resource, "/NotFound404.html");
-                response_file = open(resource, O_RDONLY, 0);
-                handle_response(404, response_file, accept_sock);
-            } else {
-                printf(" 200 OK\n");
-                send_string(accept_sock, "HTTP/1.0 200 OK\r\n");
-                send_string(accept_sock, "Server: Robbe Webserver\r\n\r\n");
-                if (ptr == request + 4) {
-                    if ( (length = get_file_size(response_file)) == -1) {
-                        perror("Error opening response file");
-                        exit(EXIT_FAILURE);
-                    }
-                    if ( (ptr = (char *) malloc(length)) == NULL) {
-                        perror("Error allocating memory for reading resource");
-                        exit(EXIT_FAILURE);
-                    }
-                    read(response_file, ptr, length);
-                    send(accept_sock, ptr, length, 0);
-                    free(ptr);
-                }
-                close(response_file);
-            }
+            // TODO: maybe return a real invalid request response?
         }
     }
     shutdown(accept_sock, SHUT_RDWR);
 }
 
-int get_request(int accept_sock, char *request) {
+int recv_request(int accept_sock, char *request) {
 #define EOL "\r\n\r\n"
 #define EOL_SIZE 4
     char *ptr;
@@ -169,6 +143,26 @@ int send_string(int accept_sock, char *buffer) {
     return 1;
 }
 
+void get_request(char *ptr, int accept_sock, struct sockaddr_in *client_addr_ptr) {
+    char resource[MAX_RESOURCE_SIZE];
+    int response_file, length;
+
+    if (ptr[strlen(ptr) - 1] == '/')
+        strcat(ptr, "index.html");
+    strcpy(resource, WEBROOT);
+    strcat(resource, ptr);
+    response_file = open(resource, O_RDONLY, 0);
+    printf("\tOpening \'%s\'\t", resource);
+    if (response_file == -1) {
+        strcpy(resource, WEBROOT);
+        strcat(resource, "/NotFound404.html");
+        response_file = open(resource, O_RDONLY, 0);
+        handle_response(404, response_file, accept_sock);
+    } else {
+        handle_response(200, response_file, accept_sock);
+    }
+}
+
 int get_file_size(int fd) {
     struct stat stat_struct;
 
@@ -190,7 +184,8 @@ void handle_response(int code, int body_file, int accept_sock) {
             break;
 
         case 200:
-            printf("200\n");
+            printf(" 200 OK\n");
+            sprintf(header, HEADER, "200 OK");
             break;
 
         default:
