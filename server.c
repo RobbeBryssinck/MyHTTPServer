@@ -20,6 +20,7 @@ int send_string(int, char *);
 int get_file_size(int);
 void handle_response(int, int, int);
 void get_request(char *, int, struct sockaddr_in *);
+void head_request(char *, int, struct sockaddr_in *);
 
 int main(int argc, char const *argv[])
 {
@@ -56,6 +57,8 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
 
+    printf("--------Robbe's webserver is running--------\n");
+
     while (1)
     {
         accept_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &addrlen);
@@ -89,12 +92,14 @@ void process_request(int accept_sock, struct sockaddr_in *client_addr_ptr) {
         // When the request is read, it stops after the resource because of the NULL charachter
         *ptr = 0; 
         ptr = NULL;
+
         if (strncmp(request, "GET ", 4) == 0) {
             ptr = request+4;
             get_request(ptr, accept_sock, client_addr_ptr);
         }
         if (strncmp(request, "HEAD ", 5) == 0) {
             ptr = request+5;
+            head_request(ptr, accept_sock, client_addr_ptr);
         }
 
         if (ptr == NULL) {
@@ -163,6 +168,31 @@ void get_request(char *ptr, int accept_sock, struct sockaddr_in *client_addr_ptr
     }
 }
 
+void head_request(char *ptr, int accept_sock, struct sockaddr_in *client_addr_ptr) {
+    char resource[MAX_RESOURCE_SIZE];
+    int response_file, length;
+
+    // TODO: delete this
+    printf("HEAD REQUEST\n");
+
+    if (ptr[strlen(ptr) - 1] == '/')
+        strcat(ptr, "index.html");
+    strcpy(resource, WEBROOT);
+    strcat(resource, ptr);
+    response_file = open(resource, O_RDONLY, 0);
+    printf("\tOpening \'%s\'\t", resource);
+    if (response_file == -1) {
+        strcpy(resource, WEBROOT);
+        strcat(resource, "/NotFound404.html");
+        response_file = open(resource, O_RDONLY, 0);
+        close(response_file);
+        handle_response(404, -1, accept_sock);
+    } else {
+        close(response_file);
+        handle_response(200, -1, accept_sock);
+    }
+}
+
 int get_file_size(int fd) {
     struct stat stat_struct;
 
@@ -193,7 +223,14 @@ void handle_response(int code, int body_file, int accept_sock) {
             printf("Error!\n");
     }
 
+    // Send header
     send_string(accept_sock, header);
+
+    // Don't send body (for example with HEAD requests)
+    if (body_file == -1)
+        return;
+
+    // Send body
     if ( (length = get_file_size(body_file)) == -1) {
         perror("Error opening response file");
         exit(EXIT_FAILURE);
