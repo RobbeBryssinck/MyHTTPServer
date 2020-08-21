@@ -172,9 +172,6 @@ void head_request(char *ptr, int accept_sock, struct sockaddr_in *client_addr_pt
     char resource[MAX_RESOURCE_SIZE];
     int response_file, length;
 
-    // TODO: delete this
-    printf("HEAD REQUEST\n");
-
     if (ptr[strlen(ptr) - 1] == '/')
         strcat(ptr, "index.html");
     strcpy(resource, WEBROOT);
