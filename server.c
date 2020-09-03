@@ -119,8 +119,6 @@ int recv_request(int accept_sock, char *request) {
 
     ptr = request;
     while (recv(accept_sock, ptr, 1, 0) == 1) {
-        if (i >= MAX_REQUEST_SIZE)
-            return -1;
         if (*ptr == EOL[eol_matched]) {
             eol_matched++;
             if (eol_matched == EOL_SIZE) {
@@ -132,6 +130,10 @@ int recv_request(int accept_sock, char *request) {
         }
         ptr++;
         i++;
+        if (i >= MAX_REQUEST_SIZE) {
+            *ptr = '\0';
+            return -1;
+        }
     }
 }
 
